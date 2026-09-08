@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1464e8">
+    <title>MediaBox</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">B</div>
+                <div>
+                    <div class="brand-name">MediaBox</div>
+                    <div class="brand-status">Local file collection</div>
+                </div>
+            </div>
+            <span class="role-label" id="role-label"></span>
+
+            <div class="header-actions">
+                <a class="roles-link" href="/shared">Public downloads</a>
+                <a class="roles-link" id="management-link" href="/management" hidden>Management</a>
+
+                <button class="theme-toggle" id="theme-toggle" type="button">
+                    <span id="theme-icon" aria-hidden="true">☾</span>
+                    <span id="theme-label">Dark mode</span>
+                </button>
+
+                <button class="logout-button" id="logout-button" type="button">
+                    Sign out
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <section class="intro">
+                <p class="eyebrow">Your file library</p>
+                <h1>Everything you need, right where you left it.</h1>
+                <p class="subtitle">
+                    Upload, search, and download files from one focused workspace.
+                </p>
+            </section>
+
+            <section class="workspace" aria-label="File management workspace">
+                <div class="panel upload-panel" id="upload-panel">
+                    <h2>Upload a file</h2>
+                    <p class="panel-copy">
+                        Add a file to the local server. Maximum size: 32 GiB.
+                    </p>
+
+                    <form action="/upload" method="post" enctype="multipart/form-data">
+                        <div class="drop-zone" id="drop-zone">
+                            <div>
+                                <div class="upload-icon" aria-hidden="true">↑</div>
+                                <p id="file-label">Choose a file or drop it here</p>
+
+                                <label class="primary-button" for="file-input">
+                                    Choose a file
+                                </label>
+
+                                <input class="sr-only" id="file-input" type="file" name="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/bmp,image/x-icon,image/tiff,video/mp4,video/webm,video/ogg,video/x-m4v,video/quicktime,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac,.mkv,.avi" required>
+                            </div>
+                        </div>
+
+                        <button class="primary-button upload-submit" type="submit">
+                            Upload file
+                        </button>
+                        <div class="upload-progress" id="upload-progress" hidden aria-live="polite">
+                            <div class="progress-ring" aria-hidden="true"><span id="upload-progress-value">0%</span></div>
+                            <span id="upload-progress-label">Uploading...</span>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="panel file-panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>Files</h2>
+                            <span class="count" id="file-count">Loading...</span>
+                        </div>
+
+                        <div class="file-toolbar">
+                            <button class="secondary-button" id="new-folder" type="button" hidden>+ New folder</button>
+                            <button class="secondary-button" id="parent-folder" type="button" hidden>← Parent folder</button>
+                        </div>
+                        <label class="sr-only" for="search">Search files</label>
+                        <input class="search" id="search" type="search" placeholder="Search files...">
+                    </div>
+
+                    <div class="access-panel" id="media-access-panel" hidden>
+                        <p id="media-access-message"></p>
+                        <button class="primary-button" id="media-access-request" type="button">Request media access</button>
+                    </div>
+
+                    <div class="role-management" id="role-management" hidden>
+                        <h3>User roles</h3>
+                        <div id="user-list"></div>
+                    </div>
+
+                    <div class="file-list" id="file-list" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <section class="panel messages-panel" aria-labelledby="messages-title">
+                <div class="section-heading">
+                    <div>
+                        <h2 id="messages-title">Messages</h2>
+                        <span class="count" id="message-count">Loading...</span>
+                    </div>
+                </div>
+
+                <form class="message-form" id="message-form">
+                    <label class="sr-only" for="message-input">Write a message</label>
+                    <textarea id="message-input" maxlength="2000" required placeholder="Write a message to the shared discussion..."></textarea>
+                    <button class="primary-button" type="submit">Send message</button>
+                </form>
+
+                <div class="message-list" id="message-list" aria-live="polite"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const fileList = document.querySelector("#file-list");
+        const fileCount = document.querySelector("#file-count");
+        const search = document.querySelector("#search");
+        const fileInput = document.querySelector("#file-input");
+        const fileLabel = document.querySelector("#file-label");
+        const dropZone = document.querySelector("#drop-zone");
+        const themeToggle = document.querySelector("#theme-toggle");
+        const logoutButton = document.querySelector("#logout-button");
+        const uploadPanel = document.querySelector("#upload-panel");
+        const roleLabel = document.querySelector("#role-label");
+        const roleManagement = document.querySelector("#role-management");
+        const userList = document.querySelector("#user-list");
+        const managementLink = document.querySelector("#management-link");
+        const messageForm = document.querySelector("#message-form");
+        const messageInput = document.querySelector("#message-input");
+        const messageList = document.querySelector("#message-list");
+        const messageCount = document.querySelector("#message-count");
+        const uploadForm = document.querySelector("#upload-panel form");
+        const mediaAccessPanel = document.querySelector("#media-access-panel");
+        const mediaAccessMessage = document.querySelector("#media-access-message");
+        const mediaAccessRequest = document.querySelector("#media-access-request");
+        const uploadProgress = document.querySelector("#upload-progress");
+        const uploadProgressValue = document.querySelector("#upload-progress-value");
+        const uploadProgressLabel = document.querySelector("#upload-progress-label");
+        const newFolderButton = document.querySelector("#new-folder");
+        const parentFolderButton = document.querySelector("#parent-folder");
+
+        let files = [];
+        let currentPath = "";
+        let currentRole = null;
+        let csrfToken = "";
+        let mediaViewing = false;
+        let mediaViewingStatus = null;
+
+        const videoExtensions = new Set([
+            "mp4", "webm", "ogv", "m4v", "mov"
+        ]);
+        const audioExtensions = new Set([
+            "mp3", "wav", "ogg", "oga", "m4a", "aac", "flac"
+        ]);
+        const imageExtensions = new Set([
+            "jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff"
+        ]);
+
+        function mediaType(filename) {
+            const extension = filename.split(".").pop().toLowerCase();
+            if (videoExtensions.has(extension)) return "video";
+            if (audioExtensions.has(extension)) return "audio";
+            if (imageExtensions.has(extension)) return "image";
+            return null;
+        }
+
+        async function moveItem(source, destination) {
+            if (!source || source === destination) return;
+            const response = await fetch("/api/files/move", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRF-Token": csrfToken
+                },
+                body: JSON.stringify({
+                    source,
+                    destination
+                })
+            });
+            if (response.ok) {
+                await fetchFiles();
+            } else {
+                const error = await response.json().catch(() => ({}));
+                window.alert(error.error || "Could not move the item.");
+            }
+        }
+
+        function renderMessages(messages) {
+            messageList.replaceChildren();
+            messageCount.textContent = `${messages.length} message${messages.length === 1 ? "" : "s"}`;
+
+            if (!messages.length) {
+                messageList.innerHTML = '<div class="empty">No messages yet.</div>';
+                return;
+            }
+
+            for (const message of messages) {
+                const row = document.createElement("article");
+                const header = document.createElement("div");
+                const author = document.createElement("strong");
+                const timestamp = document.createElement("time");
+                const content = document.createElement("p");
+
+                row.className = "message-row";
+                header.className = "message-header";
+                author.textContent = message.username;
+                timestamp.className = "message-timestamp";
+                if (message.createdAt) {
+                    const date = new Date(message.createdAt);
+                    timestamp.dateTime = message.createdAt;
+                    timestamp.textContent = Number.isNaN(date.getTime()) ?
+                        "Time unknown" :
+                        date.toLocaleString("en-US");
+                } else {
+                    timestamp.textContent = "Time unknown";
+                }
+                content.textContent = message.content;
+                header.append(author, timestamp);
+
+                if (["owner", "admin", "moderator"].includes(currentRole)) {
+                    const deleteButton = document.createElement("button");
+                    deleteButton.className = "delete-button";
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "Delete";
+                    deleteButton.addEventListener("click", () => deleteMessage(message.id));
+                    header.append(deleteButton);
+                }
+
+                row.append(header, content);
+                messageList.append(row);
+            }
+
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        async function fetchMessages() {
+            const response = await fetch("/api/messages");
+            if (response.status === 403 && !mediaViewing) {
+                messageCount.textContent = "Access required";
+                messageList.innerHTML = '<div class="empty">Messages are hidden until the owner approves access.</div>';
+                return;
+            }
+            if (!response.ok) throw new Error("Could not load messages.");
+            renderMessages(await response.json());
+        }
+
+        async function deleteMessage(messageId) {
+            if (!window.confirm("Delete this message?")) return;
+            const response = await fetch(`/api/messages/${encodeURIComponent(messageId)}`, {
+                method: "DELETE",
+                headers: {
+                    "X-CSRF-Token": csrfToken
+                }
+            });
+            if (response.ok) fetchMessages();
+        }
+
+        function renderFiles() {
+            const query = search.value.trim().toLowerCase();
+            const visibleFiles = files.filter((filename) =>
+                filename.name.toLowerCase().includes(query)
+            );
+
+            fileList.replaceChildren();
+            const itemCount = files.length;
+            fileCount.textContent = `${itemCount} kohde${itemCount === 1 ? "" : "tta"}`;
+            parentFolderButton.hidden = !currentPath;
+
+            if (visibleFiles.length === 0) {
+                fileList.innerHTML = `
+                    <div class="empty">
+                        ${files.length
+                            ? "No matching files found."
+                            : "No files have been uploaded yet."}
+                    </div>
+                `;
+                return;
+            }
+
+            for (const filename of visibleFiles) {
+                const row = document.createElement("div");
+                const info = document.createElement("div");
+                const icon = document.createElement("span");
+                const name = document.createElement("span");
+                const actions = document.createElement("div");
+                const link = document.createElement("a");
+                const deleteButton = document.createElement("button");
+
+                row.className = `file-row ${filename.type === "folder" ? "folder-row" : ""}`;
+                row.draggable = ["owner", "admin"].includes(currentRole);
+                row.dataset.path = filename.path;
+                row.dataset.type = filename.type;
+                info.className = "file-info";
+                icon.className = "file-icon";
+                icon.textContent = filename.type === "folder" ? "▰" : "▣";
+                icon.setAttribute("aria-hidden", "true");
+
+                name.className = "file-name";
+                name.textContent = filename.name;
+
+                link.className = "download-link";
+                link.href = "/uploads/" + filename.path.split("/").map(encodeURIComponent).join("/");
+                link.textContent = filename.type === "folder" ? "Open" : mediaType(filename.name) ? "Open" : "Download";
+
+                actions.className = "file-actions";
+                actions.append(link);
+                if (["file", "folder"].includes(filename.type) && (currentRole === "owner" || currentRole === "admin")) {
+                    deleteButton.className = "delete-button";
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "Delete";
+                    deleteButton.addEventListener("click", () => deleteFile(filename.path, filename.type));
+                    actions.append(deleteButton);
+                }
+                info.append(icon, name);
+                row.append(info);
+
+                if (filename.type === "folder") {
+                    link.addEventListener("click", (event) => {
+                        event.preventDefault();
+                        fetchFiles(filename.path);
+                    });
+                    row.addEventListener("dblclick", () => fetchFiles(filename.path));
+                }
+
+                const type = filename.type === "file" ? mediaType(filename.name) : null;
+                if (type) {
+                    const player = document.createElement(type === "image" ? "img" : type);
+
+                    player.className = `media-player ${type}-player`;
+                    player.setAttribute("aria-label", `${filename.name} media player`);
+
+                    if (type === "image") {
+                        player.src = link.href;
+                        player.alt = filename.name;
+                        player.loading = "lazy";
+                        player.decoding = "async";
+                    } else {
+                        const source = document.createElement("source");
+                        player.controls = true;
+                        player.preload = "metadata";
+                        source.src = link.href;
+                        player.append(source);
+                    }
+
+                    row.append(player);
+                }
+
+                row.append(actions);
+                row.addEventListener("dragstart", (event) => {
+                    event.dataTransfer.setData("text/plain", filename.path);
+                });
+                if (filename.type === "folder") {
+                    row.addEventListener("dragover", (event) => event.preventDefault());
+                    row.addEventListener("drop", async (event) => {
+                        event.preventDefault();
+                        await moveItem(event.dataTransfer.getData("text/plain"), filename.path);
+                    });
+                }
+                fileList.append(row);
+            }
+        }
+
+        async function fetchFiles(path = currentPath) {
+            try {
+                const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+
+                if (response.status < 200 || response.status >= 300) {
+                    if (response.status === 403 && !mediaViewing) {
+                        fileCount.textContent = "Access required";
+                        fileList.innerHTML = '<div class="empty">Files are hidden until the owner approves access.</div>';
+                        return;
+                    }
+                    throw new Error("Could not load files.");
+                }
+
+                const result = await response.json();
+                currentPath = result.path;
+                files = result.entries;
+                renderFiles();
+            } catch {
+                fileCount.textContent = "Unavailable";
+                fileList.innerHTML = `
+                    <div class="error">
+                        Could not connect to the file server.
+                    </div>
+                `;
+            }
+        }
+
+        async function deleteFile(filename, type = "file") {
+            const label = type === "folder" ? "folder" : "file";
+            if (!window.confirm(`Delete ${label} "${filename}"?`)) {
+                return;
+            }
+
+            const response = await fetch(
+                "/api/files/" + filename.split("/").map(encodeURIComponent).join("/"), {
+                    method: "DELETE",
+                    headers: {
+                        "X-CSRF-Token": csrfToken
+                    }
+                }
+            );
+
+            if (response.status === 403) {
+                window.alert("You do not have permission to delete this file.");
+                return;
+            }
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                window.alert(error.error || `Could not delete the ${label}.`);
+                return;
+            }
+
+            files = files.filter((file) => file.path !== filename);
+            renderFiles();
+        }
+
+        async function fetchUsers() {
+            const response = await fetch("/api/users");
+            if (!response.ok) return;
+
+            const users = await response.json();
+            userList.replaceChildren();
+
+            for (const user of users) {
+                const row = document.createElement("div");
+                const name = document.createElement("span");
+                const select = document.createElement("select");
+
+                row.className = "user-role-row";
+                name.textContent = user.username;
+
+                if (user.role === "owner") {
+                    const ownerLabel = document.createElement("span");
+                    ownerLabel.textContent = "owner";
+                    select.replaceWith(ownerLabel);
+                    row.append(name, ownerLabel);
+                    userList.append(row);
+                    continue;
+                }
+
+                for (const role of ["admin", "moderator", "user"]) {
+                    const option = document.createElement("option");
+                    option.value = role;
+                    option.textContent = role;
+                    option.selected = role === user.role;
+                    select.append(option);
+                }
+
+                select.addEventListener("change", async () => {
+                    await fetch(`/api/users/${encodeURIComponent(user.username)}/role`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                            "X-CSRF-Token": csrfToken
+                        },
+                        body: new URLSearchParams({
+                            role: select.value
+                        })
+                    });
+                });
+
+                row.append(name, select);
+                userList.append(row);
+            }
+        }
+
+        async function loadSession() {
+            const response = await fetch("/api/auth/session");
+            const session = await response.json();
+            currentRole = session.role;
+            csrfToken = session.csrfToken || "";
+            mediaViewing = Boolean(session.mediaViewing);
+            mediaViewingStatus = session.mediaViewingStatus;
+            if (roleLabel) {
+                roleLabel.textContent = currentRole || "";
+            }
+
+            if (!mediaViewing && currentRole === "user") {
+                mediaAccessPanel.hidden = false;
+                if (mediaViewingStatus === "pending") {
+                    mediaAccessMessage.textContent = "Your access request is waiting for owner approval.";
+                    mediaAccessRequest.hidden = true;
+                } else if (mediaViewingStatus === "denied") {
+                    mediaAccessMessage.textContent = "The owner has not approved your access yet.";
+                } else {
+                    mediaAccessMessage.textContent = "Request owner approval to view files and other content.";
+                }
+            }
+
+            managementLink.hidden = currentRole !== "owner";
+            uploadPanel.hidden = !["owner", "admin"].includes(currentRole);
+            newFolderButton.hidden = !["owner", "admin"].includes(currentRole);
+            messageForm.hidden = !mediaViewing;
+        }
+
+        function setTheme(theme) {
+            document.documentElement.dataset.theme = theme;
+            localStorage.setItem("theme", theme);
+
+            const darkMode = theme === "dark";
+            document.querySelector("#theme-icon").textContent = darkMode ? "☀" : "☾";
+            document.querySelector("#theme-label").textContent =
+                darkMode ? "Light mode" : "Dark mode";
+        }
+
+        themeToggle.addEventListener("click", () => {
+            const nextTheme =
+                document.documentElement.dataset.theme === "dark" ?
+                "light" :
+                "dark";
+
+            setTheme(nextTheme);
+        });
+
+        function uploadWithProgress(url, form) {
+            return new Promise((resolve, reject) => {
+                const request = new XMLHttpRequest();
+                request.open("POST", url);
+                request.setRequestHeader("X-CSRF-Token", csrfToken);
+                request.upload.addEventListener("progress", (event) => {
+                    if (!event.lengthComputable) return;
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    uploadProgressValue.textContent = `${percent}%`;
+                    uploadProgressLabel.textContent = `Uploading... ${percent}%`;
+                    uploadProgress.style.setProperty("--progress", `${percent * 3.6}deg`);
+                });
+                request.addEventListener("load", () => resolve(request));
+                request.addEventListener("error", () => reject(new Error("network")));
+                request.addEventListener("abort", () => reject(new Error("aborted")));
+                request.send(new FormData(form));
+            });
+        }
+
+        logoutButton.addEventListener("click", async () => {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": csrfToken
+                }
+            });
+            window.location.href = "/";
+        });
+
+        uploadForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            uploadProgress.hidden = false;
+            uploadProgressValue.textContent = "0%";
+            uploadProgressLabel.textContent = "Uploading... 0%";
+            uploadProgress.style.setProperty("--progress", "0deg");
+            try {
+                const uploadUrl = `/upload?path=${encodeURIComponent(currentPath)}`;
+                const response = await uploadWithProgress(uploadUrl, uploadForm);
+
+                if (response.status < 200 || response.status >= 300) {
+                    let message = `File upload failed (HTTP ${response.status}).`;
+                    try {
+                        const error = JSON.parse(response.responseText);
+                        if (error.error) {
+                            message = error.error;
+                            if (error.limitBytes) {
+                                const limitGiB = error.limitBytes / (1024 ** 3);
+                                message += ` The maximum allowed size is ${limitGiB} GiB.`;
+                            }
+                        }
+                    } catch {
+                        // The server may return an HTML error page for request errors.
+                    }
+                    window.alert(message);
+                    return;
+                }
+
+                const uploadResult = JSON.parse(response.responseText);
+                uploadForm.reset();
+                fileLabel.textContent = "Choose a file or drop it here";
+                await fetchFiles();
+            } catch {
+                window.alert("File upload failed: could not connect to the server.");
+            } finally {
+                uploadProgress.hidden = true;
+            }
+        });
+
+        mediaAccessRequest.addEventListener("click", async () => {
+            const response = await fetch("/api/media-access/request", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": csrfToken
+                }
+            });
+
+            if (response.ok) {
+                mediaViewingStatus = "pending";
+                mediaAccessMessage.textContent = "Your access request is waiting for owner approval.";
+                mediaAccessRequest.hidden = true;
+            }
+        });
+
+        newFolderButton.addEventListener("click", async () => {
+            const name = window.prompt("New folder name:");
+            if (!name) return;
+            const response = await fetch("/api/folders", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRF-Token": csrfToken
+                },
+                body: new URLSearchParams({
+                    name,
+                    path: currentPath
+                })
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                window.alert(error.error || "Could not create the folder.");
+                return;
+            }
+            await fetchFiles();
+        });
+
+        parentFolderButton.addEventListener("click", () => {
+            const parts = currentPath.split("/").filter(Boolean);
+            parts.pop();
+            fetchFiles(parts.join("/"));
+        });
+
+        parentFolderButton.addEventListener("dragover", (event) => {
+            if (currentPath) event.preventDefault();
+        });
+
+        parentFolderButton.addEventListener("drop", async (event) => {
+            event.preventDefault();
+            const parts = currentPath.split("/").filter(Boolean);
+            parts.pop();
+            await moveItem(event.dataTransfer.getData("text/plain"), parts.join("/"));
+        });
+
+        fileInput.addEventListener("change", () => {
+            fileLabel.textContent =
+                fileInput.files[0]?.name ||
+                "Choose a file or drop it here";
+        });
+
+        for (const eventName of ["dragenter", "dragover"]) {
+            dropZone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropZone.classList.add("dragging");
+            });
+        }
+
+        for (const eventName of ["dragleave", "drop"]) {
+            dropZone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropZone.classList.remove("dragging");
+            });
+        }
+
+        dropZone.addEventListener("drop", (event) => {
+            fileInput.files = event.dataTransfer.files;
+            fileLabel.textContent =
+                fileInput.files[0]?.name ||
+                "Choose a file or drop it here";
+        });
+
+        search.addEventListener("input", renderFiles);
+        messageForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const response = await fetch("/api/messages", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRF-Token": csrfToken
+                },
+                body: new URLSearchParams({
+                    content: messageInput.value
+                })
+            });
+            if (response.ok) {
+                messageInput.value = "";
+                fetchMessages();
+            }
+        });
+        setTheme(localStorage.getItem("theme") || "light");
+        loadSession().then(() => Promise.all([fetchFiles(), fetchMessages()]));
+    </script>
+</body>
+
+</html>

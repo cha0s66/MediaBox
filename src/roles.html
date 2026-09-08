@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediaBox - User roles</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <main class="auth-page">
+        <section class="auth-card roles-card">
+            <div class="brand-mark">B</div>
+            <h1>User roles</h1>
+            <p>The owner can manage access for other users.</p>
+
+            <div id="user-list" class="roles-list" aria-live="polite"></div>
+
+            <p id="message" role="status"></p>
+            <a class="back-link" href="/files">Back to files</a>
+        </section>
+    </main>
+
+    <script>
+        const userList = document.querySelector("#user-list");
+        const message = document.querySelector("#message");
+        let csrfToken = "";
+
+        async function loadSession() {
+            const response = await fetch("/api/auth/session");
+            const session = await response.json();
+            csrfToken = session.csrfToken || "";
+        }
+
+        async function loadUsers() {
+            const response = await fetch("/api/users");
+
+            if (response.status === 403) {
+                window.location.href = "/files";
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error("Could not load users.");
+            }
+
+            const users = await response.json();
+            userList.replaceChildren();
+
+            for (const user of users) {
+                const row = document.createElement("div");
+                const name = document.createElement("span");
+                const role = document.createElement("select");
+
+                row.className = "user-role-row";
+                name.textContent = user.username;
+
+                if (user.role === "owner") {
+                    const ownerLabel = document.createElement("span");
+                    ownerLabel.textContent = "owner";
+                    row.append(name, ownerLabel);
+                    userList.append(row);
+                    continue;
+                }
+
+                for (const roleName of ["admin", "moderator", "user"]) {
+                    const option = document.createElement("option");
+                    option.value = roleName;
+                    option.textContent = roleName;
+                    option.selected = roleName === user.role;
+                    role.append(option);
+                }
+
+                role.addEventListener("change", async () => {
+                    const response = await fetch(
+                        `/api/users/${encodeURIComponent(user.username)}/role`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/x-www-form-urlencoded",
+                                "X-CSRF-Token": csrfToken
+                            },
+                            body: new URLSearchParams({
+                                role: role.value
+                            })
+                        }
+                    );
+
+                    message.textContent = response.ok ?
+                        "Role updated." :
+                        "Could not update role.";
+                });
+
+                row.append(name, role);
+                userList.append(row);
+            }
+        }
+
+        loadSession().then(loadUsers).catch(() => {
+            message.textContent = "Could not connect to the server.";
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediaBox - Management</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <main class="auth-page">
+        <section class="auth-card management-card">
+            <div class="brand-mark">B</div>
+            <p class="eyebrow">Owner tools</p>
+            <h1>Management</h1>
+            <p>Manage user access. Only the owner can change roles.</p>
+
+            <div class="role-help">
+                <p><strong>Admin</strong> can manage files and delete messages.</p>
+                <p><strong>Moderator</strong> can upload files and delete messages.</p>
+                <p><strong>User</strong> can access files and send messages after approval.</p>
+            </div>
+
+            <label class="sr-only" for="user-search">Search users</label>
+            <input class="search management-search" id="user-search" type="search" placeholder="Search users...">
+            <div id="user-list" class="roles-list" aria-live="polite"></div>
+            <h2>Media access</h2>
+            <div id="media-access-list" class="roles-list" aria-live="polite"></div>
+            <p id="message" class="management-message" role="status"></p>
+            <a class="back-link" href="/files">Back to files</a>
+        </section>
+    </main>
+
+    <script>
+        const userList = document.querySelector("#user-list");
+        const userSearch = document.querySelector("#user-search");
+        const mediaAccessList = document.querySelector("#media-access-list");
+        const message = document.querySelector("#message");
+        let users = [];
+        let csrfToken = "";
+
+        async function loadSession() {
+            const response = await fetch("/api/auth/session");
+            const session = await response.json();
+            csrfToken = session.csrfToken || "";
+        }
+
+        function renderUsers() {
+            const query = userSearch.value.trim().toLowerCase();
+            userList.replaceChildren();
+
+            for (const user of users.filter((user) =>
+                    user.username.toLowerCase().includes(query)
+                )) {
+                const row = document.createElement("div");
+                const name = document.createElement("span");
+                name.textContent = user.username;
+                row.className = "user-role-row";
+
+                if (user.role === "owner") {
+                    const ownerLabel = document.createElement("span");
+                    ownerLabel.textContent = "owner";
+                    row.append(name, ownerLabel);
+                    userList.append(row);
+                    continue;
+                }
+
+                const role = document.createElement("select");
+                for (const roleName of ["admin", "moderator", "user"]) {
+                    const option = document.createElement("option");
+                    option.value = roleName;
+                    option.textContent = roleName;
+                    option.selected = roleName === user.role;
+                    role.append(option);
+                }
+                role.addEventListener("change", async () => {
+                    const response = await fetch(`/api/users/${encodeURIComponent(user.username)}/role`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                            "X-CSRF-Token": csrfToken
+                        },
+                        body: new URLSearchParams({
+                            role: role.value
+                        })
+                    });
+                    if (response.ok) user.role = role.value;
+                    message.textContent = response.ok ? "Role updated." : "Could not update role.";
+                });
+                row.append(name, role);
+                userList.append(row);
+            }
+        }
+
+        async function loadUsers() {
+            const response = await fetch("/api/users");
+            if (response.status === 403) {
+                window.location.href = "/files";
+                return;
+            }
+            if (!response.ok) throw new Error("Could not load users.");
+
+            users = await response.json();
+            renderUsers();
+        }
+
+        async function loadMediaAccess() {
+            const response = await fetch("/api/media-access");
+            if (!response.ok) throw new Error("Could not load media access requests.");
+
+            mediaAccessList.replaceChildren();
+            for (const user of await response.json()) {
+                const row = document.createElement("div");
+                const name = document.createElement("span");
+                const status = document.createElement("span");
+                const action = document.createElement("button");
+
+                row.className = "user-role-row";
+                name.textContent = user.username;
+                status.textContent = user.status === "pending" ? "Pending" :
+                    user.status === "approved" ? "Approved" : "Not approved";
+                action.className = "primary-button access-action";
+                action.type = "button";
+                action.textContent = user.status === "approved" ? "Revoke access" : "Approve";
+                action.addEventListener("click", async () => {
+                    const nextStatus = user.status === "approved" ? "denied" : "approved";
+                    const update = await fetch(`/api/media-access/${encodeURIComponent(user.username)}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                            "X-CSRF-Token": csrfToken
+                        },
+                        body: new URLSearchParams({
+                            status: nextStatus
+                        })
+                    });
+                    if (update.ok) {
+                        message.textContent = nextStatus === "approved" ? "Media access approved." : "Media access revoked.";
+                        loadMediaAccess();
+                    }
+                });
+                row.append(name, status, action);
+                mediaAccessList.append(row);
+            }
+        }
+
+        userSearch.addEventListener("input", renderUsers);
+        loadSession().then(() => Promise.all([loadUsers(), loadMediaAccess()])).catch(() => {
+            message.textContent = "Could not connect to the server.";
+        });
+    </script>
+</body>
+
+</html>

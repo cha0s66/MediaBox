@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MediaBox - Sign in</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <main class="auth-page">
+        <section class="auth-card">
+            <div class="brand-mark">B</div>
+            <h1>MediaBox</h1>
+            <p>Sign in to your file server</p>
+
+            <form id="login-form">
+                <label for="login-username">Username</label>
+                <input id="login-username" name="username" required>
+
+                <label for="login-password">Password</label>
+                <input id="login-password" name="password" type="password" required>
+
+                <button type="submit">Sign in</button>
+            </form>
+
+            <hr>
+
+            <h2>Create an account</h2>
+
+            <form id="signup-form">
+                <label for="signup-username">Username</label>
+                <input id="signup-username" name="username" required>
+
+                <label for="signup-password">Password</label>
+                <input id="signup-password" name="password" type="password" required>
+
+                <button type="submit">Create account</button>
+            </form>
+
+            <p id="message" role="status"></p>
+            <p><a href="/shared">Browse public downloads</a></p>
+        </section>
+    </main>
+
+    <script>
+        const message = document.querySelector("#message");
+
+        async function submitAuth(url, form) {
+            message.textContent = "";
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: new URLSearchParams(new FormData(form))
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = result.error || "The operation failed.";
+                    return;
+                }
+
+                window.location.href = "/files";
+            } catch {
+                message.textContent = "Could not connect to the server.";
+            }
+        }
+
+        document.querySelector("#login-form").addEventListener("submit", (event) => {
+            event.preventDefault();
+            submitAuth("/api/auth/login", event.currentTarget);
+        });
+
+        document.querySelector("#signup-form").addEventListener("submit", (event) => {
+            event.preventDefault();
+            submitAuth("/api/auth/signup", event.currentTarget);
+        });
+    </script>
+</body>
+
+</html>

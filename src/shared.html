@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1464e8">
+    <title>MediaBox - Public downloads</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">B</div>
+                <div>
+                    <div class="brand-name">MediaBox</div>
+                    <div class="brand-status">Public downloads</div>
+                </div>
+            </div>
+            <a class="roles-link" id="home-link" href="/">Home</a>
+            <a class="roles-link" id="login-link" href="/">Sign in</a>
+            <button class="roles-link" id="logout-button" type="button" hidden>Sign out</button>
+        </header>
+
+        <main>
+            <section class="intro">
+                <p class="eyebrow">Public downloads</p>
+                <h1>Share with everyone.</h1>
+                <p class="subtitle">Download files without signing in.</p>
+            </section>
+
+            <section class="panel file-panel public-projects" aria-labelledby="projects-title">
+                <div class="section-heading">
+                    <div>
+                        <h2 id="projects-title">Available files</h2>
+                        <span class="count" id="project-count">Loading...</span>
+                    </div>
+                    <label class="sr-only" for="project-search">Search downloads</label>
+                    <input class="search" id="project-search" type="search" placeholder="Search downloads...">
+                </div>
+                <div class="shared-upload" id="shared-upload" hidden>
+                    <form id="shared-upload-form" enctype="multipart/form-data">
+                        <label class="primary-button" for="shared-file-input">Choose a file</label>
+                        <input class="sr-only" id="shared-file-input" type="file" name="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/bmp,image/x-icon,image/tiff,video/mp4,video/webm,video/ogg,video/x-m4v,video/quicktime,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac,.mkv,.avi" required>
+                        <span id="shared-file-label">No file selected</span>
+                        <button class="primary-button" type="submit">Upload file</button>
+                        <div class="upload-progress" id="upload-progress" hidden aria-live="polite">
+                            <div class="progress-ring" aria-hidden="true"><span id="upload-progress-value">0%</span></div>
+                            <span id="upload-progress-label">Uploading...</span>
+                        </div>
+                    </form>
+                </div>
+                <div class="file-list" id="project-list" aria-live="polite"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const projectList = document.querySelector("#project-list");
+        const projectCount = document.querySelector("#project-count");
+        const projectSearch = document.querySelector("#project-search");
+        const homeLink = document.querySelector("#home-link");
+        const loginLink = document.querySelector("#login-link");
+        const logoutButton = document.querySelector("#logout-button");
+        const sharedUpload = document.querySelector("#shared-upload");
+        const sharedUploadForm = document.querySelector("#shared-upload-form");
+        const sharedFileInput = document.querySelector("#shared-file-input");
+        const sharedFileLabel = document.querySelector("#shared-file-label");
+        const uploadProgress = document.querySelector("#upload-progress");
+        const uploadProgressValue = document.querySelector("#upload-progress-value");
+        const uploadProgressLabel = document.querySelector("#upload-progress-label");
+        let csrfToken = "";
+        let sessionRole = null;
+        let projects = [];
+
+        function renderProjects() {
+            const query = projectSearch.value.trim().toLowerCase();
+            const visibleProjects = projects.filter((project) => project.toLowerCase().includes(query));
+            projectList.replaceChildren();
+            projectCount.textContent = `${projects.length} file${projects.length === 1 ? "" : "s"}`;
+
+            if (!visibleProjects.length) {
+                projectList.innerHTML = `<div class="empty">${projects.length ? "No matching files found." : "The shared folder is empty."}</div>`;
+                return;
+            }
+
+            for (const project of visibleProjects) {
+                const row = document.createElement("div");
+                const info = document.createElement("div");
+                const icon = document.createElement("span");
+                const name = document.createElement("span");
+                const actions = document.createElement("div");
+                const link = document.createElement("a");
+                const deleteButton = document.createElement("button");
+
+                row.className = "file-row";
+                info.className = "file-info";
+                icon.className = "file-icon";
+                icon.textContent = "▣";
+                icon.setAttribute("aria-hidden", "true");
+                name.className = "file-name";
+                name.textContent = project;
+                link.className = "download-link";
+                link.href = "/shared/" + project.split("/").map(encodeURIComponent).join("/");
+                link.textContent = "Download";
+                actions.className = "file-actions";
+                actions.append(link);
+                if (["owner", "admin"].includes(sessionRole)) {
+                    deleteButton.className = "delete-button";
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "Delete";
+                    deleteButton.addEventListener("click", () => deleteProject(project));
+                    actions.append(deleteButton);
+                }
+                info.append(icon, name);
+                row.append(info, actions);
+                projectList.append(row);
+            }
+        }
+
+        async function deleteProject(project) {
+            if (!window.confirm(`Delete file "${project}"?`)) {
+                return;
+            }
+
+            const response = await fetch(
+                "/api/shared/" + project.split("/").map(encodeURIComponent).join("/"), {
+                    method: "DELETE",
+                    headers: {
+                        "X-CSRF-Token": csrfToken
+                    }
+                }
+            );
+
+            if (response.status === 403) {
+                window.alert("You do not have permission to delete this file.");
+                return;
+            }
+
+            if (!response.ok) {
+                window.alert("Could not delete the file.");
+                return;
+            }
+
+            projects = projects.filter((file) => file !== project);
+            renderProjects();
+        }
+
+        async function loadProjects() {
+            try {
+                const response = await fetch("/api/shared");
+                if (!response.ok) throw new Error();
+                projects = await response.json();
+                renderProjects();
+            } catch {
+                projectCount.textContent = "Unavailable";
+                projectList.innerHTML = '<div class="error">Could not load shared files.</div>';
+            }
+        }
+
+        async function loadSession() {
+            const response = await fetch("/api/auth/session");
+            const session = await response.json();
+            csrfToken = session.csrfToken || "";
+            sessionRole = session.role;
+            renderProjects();
+            homeLink.href = session.authenticated ? "/files" : "/";
+            loginLink.hidden = session.authenticated;
+            logoutButton.hidden = !session.authenticated;
+            sharedUpload.hidden = !["owner", "admin"].includes(session.role);
+        }
+
+        logoutButton.addEventListener("click", async () => {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": csrfToken
+                }
+            });
+            window.location.href = "/";
+        });
+
+        function uploadWithProgress(url, form) {
+            return new Promise((resolve, reject) => {
+                const request = new XMLHttpRequest();
+                request.open("POST", url);
+                request.setRequestHeader("X-CSRF-Token", csrfToken);
+                request.upload.addEventListener("progress", (event) => {
+                    if (!event.lengthComputable) return;
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    uploadProgressValue.textContent = `${percent}%`;
+                    uploadProgressLabel.textContent = `Uploading... ${percent}%`;
+                    uploadProgress.style.setProperty("--progress", `${percent * 3.6}deg`);
+                });
+                request.addEventListener("load", () => resolve(request));
+                request.addEventListener("error", () => reject(new Error("network")));
+                request.addEventListener("abort", () => reject(new Error("aborted")));
+                request.send(new FormData(form));
+            });
+        }
+
+        sharedUploadForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            uploadProgress.hidden = false;
+            uploadProgressValue.textContent = "0%";
+            uploadProgressLabel.textContent = "Uploading... 0%";
+            uploadProgress.style.setProperty("--progress", "0deg");
+            try {
+                const response = await uploadWithProgress("/shared/upload", sharedUploadForm);
+
+                if (response.status < 200 || response.status >= 300) {
+                    let message = `File upload failed (HTTP ${response.status}).`;
+                    try {
+                        const error = JSON.parse(response.responseText);
+                        if (error.error) message = error.error;
+                    } catch {
+                        // The server may return an HTML error page for request errors.
+                    }
+                    window.alert(message);
+                    return;
+                }
+
+                const uploadResult = JSON.parse(response.responseText);
+                if (uploadResult.filename && !projects.includes(uploadResult.filename)) {
+                    projects.push(uploadResult.filename);
+                    projects.sort();
+                    renderProjects();
+                }
+                sharedUploadForm.reset();
+                sharedFileLabel.textContent = "No file selected";
+                await loadProjects();
+            } catch {
+                window.alert("File upload failed: could not connect to the server.");
+            } finally {
+                uploadProgress.hidden = true;
+            }
+        });
+
+        sharedFileInput.addEventListener("change", () => {
+            sharedFileLabel.textContent =
+                sharedFileInput.files[0]?.name ||
+                "No file selected";
+        });
+
+        projectSearch.addEventListener("input", renderProjects);
+        Promise.all([loadSession(), loadProjects()]);
+    </script>
+</body>
+
+</html>
