@@ -32,7 +32,6 @@ On Windows, `startserver.bat` and `stopserver.bat` provide the same local workfl
 - Private uploads with image, audio, and video previews
 - Public downloads from `shared/`
 - Owner-approved media access for regular users
-- Optional JSON and upload backups
 
 ## Configuration
 
@@ -44,7 +43,6 @@ Configuration is provided through environment variables:
 | `FILESERVER_SESSION_TTL` | `28800` | Session lifetime in seconds |
 | `FILESERVER_MAX_UPLOAD_SIZE` | `34359738368` | Maximum upload size in bytes |
 | `FILESERVER_SECURE_COOKIE` | `0` | Set to `1` when serving through HTTPS |
-| `FILESERVER_BACKUPS` | `0` | Set to `1` to retain JSON and upload backups |
 
 For a LAN-only deployment, bind to the machine's network interfaces explicitly:
 
@@ -62,7 +60,7 @@ Run the test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The tests start an isolated temporary server and do not modify the repository's JSON, uploads, shared files, or backups.
+The tests start an isolated temporary server and do not modify the repository's JSON, uploads, or shared files.
 
 ## Repository layout
 
@@ -71,10 +69,9 @@ The tests start an isolated temporary server and do not modify the repository's 
 - `json/` - empty template data files populated at runtime
 - `uploads/` - private uploaded files
 - `shared/` - public downloads
-- `backups/` - optional generated backups
 - `tests/` - integration tests
 
-Runtime data, generated files, and local configuration are excluded by `.gitignore`. Do not commit private media, credentials, password hashes, or backup archives.
+Runtime data and local configuration are excluded by `.gitignore`. Do not commit private media, credentials, or password hashes.
 
 ## License
 

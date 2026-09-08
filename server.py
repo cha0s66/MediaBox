@@ -44,12 +44,9 @@ UPLOAD_DIRECTORY = ROOT_DIRECTORY / "uploads"
 PUBLIC_DOWNLOADS_DIRECTORY = ROOT_DIRECTORY / "shared"
 USER_FILE = ROOT_DIRECTORY / "json" / "users.json"
 MESSAGE_FILE = ROOT_DIRECTORY / "json" / "messages.json"
-BACKUP_DIRECTORY = ROOT_DIRECTORY / "backups"
-BACKUP_UPLOAD_DIRECTORY = BACKUP_DIRECTORY / "uploads"
 OWNER_USERNAME = os.environ.get("FILESERVER_OWNER_USERNAME")
 SESSION_TTL_SECONDS = positive_environment_int("FILESERVER_SESSION_TTL", 28800)
 SECURE_COOKIE = os.environ.get("FILESERVER_SECURE_COOKIE", "0") == "1"
-BACKUPS_ENABLED = os.environ.get("FILESERVER_BACKUPS", "0") == "1"
 
 SESSIONS = {}
 RATE_LIMITS = {}
@@ -117,26 +114,8 @@ def save_messages(messages):
     save_json(MESSAGE_FILE, messages)
 
 
-def backup_file(path):
-    if not BACKUPS_ENABLED:
-        return
-
-    if not path.exists():
-        return
-
-    BACKUP_DIRECTORY.mkdir(exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = BACKUP_DIRECTORY / f"{path.stem}-{timestamp}{path.suffix}"
-    shutil.copy2(path, backup_path)
-
-    backups = sorted(BACKUP_DIRECTORY.glob(f"{path.stem}-*{path.suffix}"))
-    for old_backup in backups[:-10]:
-        old_backup.unlink(missing_ok=True)
-
-
 def save_json(path, value):
     path.parent.mkdir(exist_ok=True)
-    backup_file(path)
     temporary_path = None
 
     try:
@@ -155,19 +134,6 @@ def save_json(path, value):
     finally:
         if temporary_path:
             Path(temporary_path).unlink(missing_ok=True)
-
-
-def backup_upload(path):
-    if not BACKUPS_ENABLED:
-        return
-
-    if not path.exists():
-        return
-
-    BACKUP_UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = BACKUP_UPLOAD_DIRECTORY / f"{path.stem}-{timestamp}-{secrets.token_hex(4)}{path.suffix}"
-    shutil.copy2(path, backup_path)
 
 
 def rate_limit_key(handler, bucket):
@@ -428,7 +394,6 @@ class FileServerHandler(SimpleHTTPRequestHandler):
             "/users.json",
             "/messages.json",
             "/server.py",
-            "/server-backup.py",
             "/startserver.bat",
         }:
             self.send_error(404, "File not found.")
@@ -984,7 +949,6 @@ class FileServerHandler(SimpleHTTPRequestHandler):
             return
 
         destination.write_bytes(uploaded_data)
-        backup_upload(destination)
 
         self.send_json(
             201,
@@ -1104,7 +1068,6 @@ class FileServerHandler(SimpleHTTPRequestHandler):
                 self.send_json(404, {"error": "File not found."})
                 return
 
-            backup_upload(project_path)
             project_path.unlink()
 
             self.send_response(204)
@@ -1137,7 +1100,6 @@ class FileServerHandler(SimpleHTTPRequestHandler):
         if destination.is_dir():
             shutil.rmtree(destination)
         else:
-            backup_upload(destination)
             destination.unlink()
 
         self.send_response(204)

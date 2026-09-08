@@ -4,14 +4,12 @@ __pycache__/
 # Local application data
 uploads/*
 shared/*
-backups/*
 json/users.json
 json/messages.json
 
 # Keep template directories available in fresh clones
 !uploads/.gitkeep
 !shared/.gitkeep
-!backups/.gitkeep
 !json/users.json
 !json/messages.json
 
